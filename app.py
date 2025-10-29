@@ -18,33 +18,6 @@ def get_db_connection():
         print(f"Error: {err}")
         return None
     
-@app.route('/oggetti', methods=['GET'])
-def get_oggetti():
-    db = get_db_connection()
-    if db is None:
-        return jsonify({'error': 'Database connection failed'}), 500
-    
-    try:
-        cursor = db.cursor(dictionary=True)
-        query = "SELECT * FROM Oggetti"
-
-        #query="""
-        #    SELECT o.id_oggetto, o.nome, o.quantita, o.descrizione, o.percorso_immagine, 
-        #           c.nome_categoria 
-        #    FROM Oggetti o
-        #    JOIN Categorie c ON o.id_categoria = c.id_categoria
-        #"""
-
-        cursor.execute(query)
-        oggetti = cursor.fetchall()
-        return jsonify(oggetti), 200
-    except mysql.connector.Error as err:
-        print(f"Error: {err}")
-        return jsonify({'error': 'Query execution failed'}), 500
-    finally:
-        if db.is_connected():
-            db.close()
-
 @app.route('/oggetti', methods=['POST'])
 def add_oggetto():
     db = get_db_connection()
@@ -123,9 +96,50 @@ def delete_oggetto(id_item):
         if db.is_connected():
             db.close()
 
+@app.route('/oggetti', methods=['GET'])
+def get_oggetti():
+    db = get_db_connection()
+    if db is None:
+        return jsonify({'error': 'Database connection failed'}), 500
 
+    dati = request.args()
+    filtro = dati.get('filtro_id')
 
+    if filtro is None:
+        return jsonify({'error': 'filtro_id parameter is required'}), 400
+    elif filtro == 1:
+        ricerca_nome(db, dati)
+        pass
+    elif filtro == 2:
+        ricerca_quantita()
+        pass
+    elif filtro == 3:
+        ricerca_quantita()
+        pass
 
+# filtro id = 1
+def ricerca_nome(db, dati):
+    nome = dati.get('nome')
+    try: 
+        cursor = db.cursor()
+        query = "SELECT * FROM Oggetti WHERE nome = %s"
+        cursor.execute(query, (nome,))
+        risultati = cursor.fetchall()
+        return jsonify(risultati), 200
+    except mysql.connector.Error as err:
+        print(f"Error: {err}")
+        return jsonify({'error': 'Failed to retrieve Oggetti'}), 500
+    finally:
+        if db.is_connected():
+            db.close()
+
+# filtro id = 2
+def ricerca_quantita():
+    pass
+
+# filtro id = 3
+def ricerca_categoria():
+    pass
 
 if __name__ == '__main__':
     #La tua API sarà in ascolto su http://127.0.0.1:5000
