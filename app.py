@@ -102,75 +102,61 @@ def get_oggetti():
     if db is None:
         return jsonify({'error': 'Database connection failed'}), 500
 
-    WHERE_ADDED = False
-
+    # Liste per costruire la clausola WHERE in modo sicuro
+    where_clauses = []
+    params = []
+    
+    # Non usiamo più filtro_id, usiamo i filtri direttamente
     dati = request.args
-    filtro = dati.get('filtro_id')
     nome = dati.get('nome')
-    categoria = dati.get('categoria')
-    quantità = dati.get('quantita')
+    categoria_id = dati.get('categoria_id') # Rinominato per chiarezza con l'ID
+    quantita = dati.get('quantita')
 
-    response = None
+    try:
+        # 1. COSTRUZIONE DEI FILTRI (SOLO SE SONO PRESENTI)
+        
+        if nome:        # filtro per nome (ricerca parziale LIKE)
+            where_clauses.append("nome LIKE %s")
+            params.append(f"%{nome}%") # Il valore con i wildcard
 
-    if filtro is None:
-        try:
-            cursor = db.cursor(dictionary=True)
-            query = "SELECT * FROM Oggetti"
-            cursor.execute(query)
-            oggetti = cursor.fetchall()
-            response = jsonify(oggetti), 200
-        except mysql.connector.Error as err:
-            print(f"Error: {err}")
-            response = jsonify({'error': 'Failed to retrieve Oggetti senza filtro'}), 500
-        finally:
-            if db.is_connected():
-                db.close()
+        if categoria_id:   # filtro per categoria (match esatto)
+            where_clauses.append("id_categoria = %s")
+            params.append(categoria_id) # Il valore del filtro
 
-    else:
-        try:
-            cursor = db.cursor(dictionary=True)
-            query = "SELECT * FROM Oggetti"
+        if quantita:    # filtro per quantità (match esatto)
+            where_clauses.append("quantita < %s")
+            params.append(quantita) # Il valore del filtro
 
-            if nome is not None:        # filtro per nome
-                aggregatore = ""
-                if WHERE_ADDED is False:
-                    aggregatore = " WHERE"
-                    WHERE_ADDED = True
-                else:
-                    aggregatore = " AND"
-                
-                query += f"{aggregatore} nome LIKE '%{nome}%'"
-
-            if categoria is not None:   # filtro per categoria
-                aggregatore = ""
-                if WHERE_ADDED is False:
-                    aggregatore = " WHERE"
-                    WHERE_ADDED = True
-                else:
-                    aggregatore = " AND"
-                
-                query += f"{aggregatore} id_categoria = {categoria}"
-
-            if quantità is not None:    # filtro per quantità
-                aggregatore = ""
-                if WHERE_ADDED is False:
-                    aggregatore = " WHERE"
-                    WHERE_ADDED = True
-                else:
-                    aggregatore = " AND"
-                
-                query += f"{aggregatore} quantita = {quantità}"
-
-            cursor.execute(query, (filtro,))
-            oggetti = cursor.fetchall()
-            response = jsonify(oggetti), 200
-        except mysql.connector.Error as err:
-            print(f"Error: {err}")
-            response = jsonify({'error': 'Failed to retrieve Oggetti con filtro'}, query), 500
-        finally:
-            if db.is_connected():
-                db.close()
-    return response
+        # 2. ASSEMBLAGGIO DELLA QUERY
+        query_base = "SELECT * FROM Oggetti"
+        
+        query_finale = query_base
+        
+        if where_clauses:
+            # Unisce i frammenti SQL con " AND " e aggiunge WHERE
+            query_finale += " WHERE " + " AND ".join(where_clauses)
+        
+        # 3. ESECUZIONE DELLA QUERY (SICURA)
+        cursor = db.cursor(dictionary=True)
+        
+        # Passiamo la query che ora usa %s e la tupla dei parametri
+        cursor.execute(query_finale, tuple(params))
+        
+        oggetti = cursor.fetchall()
+        
+        cursor.close()
+        return jsonify(oggetti), 200
+        
+    except mysql.connector.Error as err:
+        print(f"Error: {err}")
+        # Restituisci anche la query_finale per debugging
+        return jsonify({'error': 'Failed to retrieve Oggetti', 'query_attempted': query_finale}), 500
+    except Exception as e:
+        print(f"General Error: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+    finally:
+        if db.is_connected():
+            db.close()
 
 
 if __name__ == '__main__':
